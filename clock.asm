@@ -22,7 +22,9 @@ SEED	EQU	08CH
 POLY	EQU	00DH
 PERIOD	EQU	050H
 
-STKPTR	EQU	02080h
+STKPTR	EQU	020C8h
+
+DLPRD	EQU	58752
 
 	ORG	STKPTR-4
 STKBUF:	DB	0,0,0,0	; Starting values for clock: NA, seconds, minutes, hours
@@ -60,8 +62,11 @@ LOOP:	POP D		; Pop min/sec
 	MVI B, 1	; B - Turn Decimal On
 	LXI H, BUFFER+4 ; Point to Spot
 	CALL OUTPUT	; Write it
-	LXI D, 0CB94H	; Delay
-	CALL D2
+	LXI D, DLPRD	; Delay
+	PUSH D		; Put D up on the stack
+	CALL DELAY	; Delay first half
+	POP D
+	CALL DELAY
 	JMP LOOP
 
 ; Adjust: Incremnets seconds and adjusts all counts
@@ -106,11 +111,6 @@ WR_BUF:	DCX H		; Decrement pointer
 	MOV M,A		; Put in Buf
 	RET
 
-D2:	PUSH D		; Put D up on the stack
-	CALL DELAY	; Delay first half
-	POP D
-	CALL DELAY
-	RET
 	
 
 	
