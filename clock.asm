@@ -24,7 +24,7 @@ PERIOD	EQU	050H
 
 STKPTR	EQU	020C8h
 
-DLPRD	EQU	58752
+DLPRD	EQU	0FA18h
 
 	ORG	STKPTR-4
 STKBUF:	DB	0,0,0,0	; Starting values for clock: NA, seconds, minutes, hours
