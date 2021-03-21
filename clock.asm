@@ -26,8 +26,7 @@ STKPTR	EQU	020C8h
 
 DLPRD	EQU	0FA18h
 
-	ORG	STKPTR-4
-STKBUF:	DB	0,0,0,0	; Starting values for clock: NA, seconds, minutes, hours
+CNTVAR  EQU     01406h ; Use D as 'r' constatnt and init E loop counter
 
 
 ; Pseudo Code
@@ -38,12 +37,45 @@ STKBUF:	DB	0,0,0,0	; Starting values for clock: NA, seconds, minutes, hours
 	ORG 2800h
 	
 
-START:  LXI SP,STKBUF	; Initialize stack pointer
+START:  LXI SP,STKPTR	; Initialize stack pointer
+
+	MVI A, 08H	; Set keyboard interrupt mask
+	SIM
+; Get user input into buffer
+
+; Starting with the high order digit of hours
+	LXI H, BUFFER   ; Set pointer
+	LXI D, CNTVAR	; Use D as 'r' constatnt and init E loop counter
+INLOOP:	MOV M, D        ; store 'r' at location
+	PUSH H          ; Put HL on the stack
+	PUSH D          ; Put DE on the stack
+	LXI H, BUFFER   ; Set pointer to start of buffer
+	CALL PR_BUF	; Output Display
+	CALL RDKBD
+	POP D		; Get DE off stack
+	POP H		; Get current char pointer off the stack
+	MOV M, A	; Put the new number in the buffer
+	INX H		; Increment the pointer
+	DCR E		; Decrement Loop Counter
+	JNZ INLOOP
+	
+	MVI A, 00H	; Clear keyboard interrupt mask
+	SIM
+	NOP
+;
+; Read the buffer into B and D
+;
+	LXI H, BUFFER   ; Set pointer
+	CALL RD_BUF	; Read Hours
+	MOV B, A	; Store Hours
+	CALL RD_BUF	; Read Minutes
+	MOV C, A	; Store Minutes
+	CALL RD_BUF	; Read Second
+	MOV D, A	; Store Seconds
+
 
 	
-LOOP:	POP D		; Pop min/sec
-	POP B		; Pop Hours
-	CALL ADJUST	; Adjust all the times
+LOOP:	CALL ADJUST	; Adjust all the times
 	LXI H, BUFFER+6 ; 1 past end
 	MOV E,D		; Move Seconds into E
 	CALL WR_BUF	; Write to buffer, takes E and HL
@@ -53,23 +85,57 @@ LOOP:	POP D		; Pop min/sec
 	CALL WR_BUF	; Write to buffer, takes E and HL
 
 ; Write the output
-	PUSH B
+	PUSH B		; Push time
 	PUSH D
-	XRA A		; Clear A - Use Address Field
-	MVI B, 1	; B - Turn Decimal On
-	CALL OUTPUT	; Write it
-	MVI A, 1	; A - Use Data Field
-	MVI B, 1	; B - Turn Decimal On
-	LXI H, BUFFER+4 ; Point to Spot
-	CALL OUTPUT	; Write it
+	CALL PR_BUF     ; Print the output to the display
 	LXI D, DLPRD	; Delay
 	PUSH D		; Put D up on the stack
 	CALL DELAY	; Delay first half
 	POP D
 	CALL DELAY
+	POP D		; Pop time
+	POP B
 	JMP LOOP
 
-; Adjust: Incremnets seconds and adjusts all counts
+
+
+; ---------
+; Subroutine
+; PR_BUF: Print Buffer
+; Arguments:
+;   HL - Buffer pointer
+; Clobbers:
+;   A, B, C, D, E, H, L
+; Retunrs:
+;   none
+; ---------
+PR_BUF:	XRA A		; Clear A - Use Address Field
+	MVI B, 1	; B - Turn Decimal On
+	PUSH H
+	CALL OUTPUT	; Write it
+	POP H
+	INX H
+	INX H
+	INX H
+	INX H
+	MVI A, 1	; A - Use Data Field
+	MVI B, 1	; B - Turn Decimal On
+	LXI H, BUFFER+4 ; Point to Spot
+	CALL OUTPUT	; Write it
+	RET		; Return
+
+; ---------
+; Subroutine
+; ADJUST: Incremnets seconds and adjusts all counts
+; Arguments:
+;   B = Hours (BCD Format)
+;   C = Minutes (BCD Format)
+;   D = Seconds (BCD Format)
+; Clobbers:
+;   A, E
+; Retunrs:
+;   B, C, D - Updated H, M, S
+; ---------
 ADJUST: MVI E, 060h	; Set for Comparison 60 (BCD)
 	MOV A, D	; Increment seconds
 	INR A
@@ -95,8 +161,18 @@ ADJUST: MVI E, 060h	; Set for Comparison 60 (BCD)
 	MVI B, 0	; Reset Hours
 	RET
 
-
-
+; ---------
+; Subroutine
+; WR_BUF: Writes the value in E to a character buffer pointed to by H
+;         Note the highest order nibble is written to H-1 and lowest order nibble H-2
+; Arguments:
+;   E - BCD value
+;   HL - Pointer
+; Clobbers:
+;   A
+; Retunrs:
+;   HL - Pointer decremented by 2
+; ---------
 WR_BUF:	DCX H		; Decrement pointer
 	MOV A,E		; Get Number
 	ANI 00FH	; Mask low nibble
@@ -110,6 +186,30 @@ WR_BUF:	DCX H		; Decrement pointer
 	ANI 00FH	; Mask low nibble
 	MOV M,A		; Put in Buf
 	RET
+
+; ---------
+; Subroutine
+; RD_BUF: Read byte from the string pointed to by HL
+; Arguments:
+;   HL - Pointer
+; Clobbers:
+;   A,E
+; Retunrs:
+;   A  - Byte read
+;   HL - Pointer incremented by 2
+; ---------
+; Subroutine
+RD_BUF:	MOV A, M        ; Get first byte
+	RLC 		; Rotate left 4 bits
+	RLC 
+	RLC 
+	RLC 
+	INX H		; Incement pointer - Next byte
+	MOV E, M        ; Get second byte
+	ADD E		; No we have the byte
+	INX H		; Incement pointer - Next byte
+	RET
+
 
 	
 
